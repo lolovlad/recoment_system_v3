@@ -1,0 +1,24 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# Tests and docs
+tests/
+README.md
+
+# IDE configs
+.vscode/
+.idea/
+
+# Environment variables
+.env
+.env.*
