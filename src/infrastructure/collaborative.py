@@ -1,5 +1,5 @@
-from ..domain.interfaces import Recommender
-from ..domain.entities import *
+from domain.interfaces import Recommender
+from domain.entities import *
 
 
 class CollaborativeMockModel(Recommender):

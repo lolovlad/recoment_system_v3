@@ -1,6 +1,12 @@
-from src.recommender_system.application.recommendation_service import RecommendationService
-from src.recommender_system.domain.entities import UserHistory, Recommendation
-from src.recommender_system.domain.interfaces import Recommender
+import sys
+from pathlib import Path
+
+# Добавляем src в путь для импорта
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from application.recommendation_service import RecommendationService
+from domain.entities import UserHistory, Recommendation
+from domain.interfaces import Recommender
 
 
 class FakeRecommender(Recommender):

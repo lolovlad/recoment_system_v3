@@ -1,5 +1,5 @@
-from ..domain.entities import UserHistory, Recommendation
-from ..domain.interfaces import Recommender
+from domain.entities import UserHistory, Recommendation
+from domain.interfaces import Recommender
 
 
 class RecommendationService:

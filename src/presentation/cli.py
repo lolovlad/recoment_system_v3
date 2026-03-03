@@ -1,7 +1,8 @@
 import argparse
-from ..domain.entities import UserHistory
-from ..infrastructure.collaborative import CollaborativeMockModel
-from ..application.recommendation_service import RecommendationService
+
+from domain.entities import UserHistory
+from infrastructure.collaborative import CollaborativeMockModel
+from application.recommendation_service import RecommendationService
 
 
 def main():
