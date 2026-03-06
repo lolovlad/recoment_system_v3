@@ -13,7 +13,7 @@
 
 ```bash
 poetry install
-poetry run python src/presentation/cli.py --user-id u1 --items itemA,itemB
+poetry run python -m src.recommender_system.presentation.cli --user-id u1 --items itemA,itemB
 ```
 
 Для запуска unit-тестов используется pytest.
