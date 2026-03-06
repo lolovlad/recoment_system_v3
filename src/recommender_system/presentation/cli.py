@@ -1,8 +1,7 @@
 import argparse
 
 from ..domain.entities import UserHistory
-from ..infrastructure.collaborative import CollaborativeMockModel
-from ..application.recommendation_service import RecommendationService
+from ..application.service_factory import create_recommendation_service
 
 
 def main():
@@ -19,8 +18,7 @@ def main():
         last_items=items
     )
 
-    model = CollaborativeMockModel()
-    service = RecommendationService(model)
+    service = create_recommendation_service()
 
     recommendation = service.get_recommendations(history)
 
