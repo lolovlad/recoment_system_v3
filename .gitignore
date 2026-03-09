@@ -1,5 +1,3 @@
-```gitignore
-
 __pycache__/
 *.py[cod]
 *.pyo
@@ -28,3 +26,17 @@ Thumbs.db
 
 .env
 .env.*
+
+# DVC
+.dvc/cache/
+.dvc/tmp/
+.dvc/state
+.dvc/config.local
+
+# Данные (сами файлы, но не .dvc файлы)
+data/*.csv
+data/*.json
+data/*.pkl
+data/*.parquet
+!data/*.dvc
+!data/.gitkeep
