@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from .entities import UserHistory, Recommendation
+import numpy as np
 
 
 class Recommender(ABC):
@@ -17,4 +18,10 @@ class IDataStorage(ABC):
 
     @abstractmethod
     def upload_file(self, local_path: str, remote_path: str) -> None:
+        pass
+
+
+class IModel(ABC):
+    @abstractmethod
+    def predict(self, input_data: np.ndarray) -> np.ndarray:
         pass

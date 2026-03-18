@@ -1,6 +1,10 @@
-## Recommender System — ЛР1 + ЛР2
+## Проект — ЛР1 + ЛР2 + ЛР3
 
-Проект демонстрирует скелет ИИ‑системы по принципам Clean Architecture и интеграцию слоя хранения данных с версионированием (DVC + MinIO).
+Проект демонстрирует:
+
+- **ЛР1**: скелет ИИ‑системы по принципам Clean Architecture (рекомендательная система)
+- **ЛР2**: интеграцию хранения и версионирование данных (DVC + MinIO)
+- **ЛР3**: ML‑инференс сервис на FastAPI + ONNX Runtime (регрессия: прогноз времени доставки)
 
 ### Структура
 
@@ -31,6 +35,7 @@ MINIO_ENDPOINT=http://localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=datasets
+MINIO_MODEL_BUCKET=models
 ```
 
 > Для DVC доступ к MinIO на стенде настроен через `.dvc/config.local`, который **не попадает в Git**.
@@ -44,7 +49,7 @@ docker compose up -d
 Будут подняты:
 
 - сервис `minio` (S3‑совместимое хранилище, порты `9000` — API, `9001` — Console)
-- сервис `minio-init`, который автоматически создаёт бакет `datasets`
+- сервис `minio-init`, который автоматически создаёт бакет `datasets` и `models`
 
 Консоль MinIO будет доступна по адресу `http://localhost:9001` (логин/пароль по умолчанию: `minioadmin` / `minioadmin`).
 
@@ -116,3 +121,121 @@ poetry run pytest
 ```
 
 Тесты проверяют бизнес‑логику слоя Application и не зависят от конкретных реализаций инфраструктуры.
+
+---
+
+## ЛР3 — Delivery Time Estimator (FastAPI + ONNX Runtime)
+
+### 1) Обучение и экспорт модели в ONNX
+
+Скрипт обучения **генерирует синтетический датасет**, обучает `GradientBoostingRegressor` и сохраняет модель в:
+
+- `models/delivery_estimator.onnx`
+
+Дополнительно (для ЛР3): после обучения модель **автоматически загружается в MinIO** в бакет `models`, если заданы переменные окружения MinIO.
+
+Важно: генерация датасета и обучение разделены. Сначала создайте `data/delivery_train.csv`, затем обучайте.
+
+Запуск:
+
+```bash
+poetry run python scripts/generate_delivery_data.py --rows 5000 --seed 42 --output data/delivery_train.csv
+poetry run python scripts/train_model.py --seed 42 --data data/delivery_train.csv
+```
+
+Или через bat:
+
+```bash
+scripts\generate_delivery_data.bat
+scripts\train_model.bat
+```
+
+```bash
+dvc add data/delivery_train.csv
+dvc push
+```
+
+### 2) Запуск API
+
+Команда:
+
+```bash
+poetry run uvicorn src.recommender_system.presentation.api:app --reload
+```
+
+Или через bat:
+
+```bash
+scripts\run_api.bat
+```
+
+Эндпоинт:
+
+- `POST /api/v1/delivery/estimate_time`
+
+### 3) Пример запроса (curl)
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/delivery/estimate_time" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"distance\":12.5,\"hour\":18,\"day_of_week\":5,\"items_count\":3}"
+```
+
+Пример ответа:
+
+```json
+{"estimated_minutes": 45.0}
+```
+
+### 4) Smoke-test (PowerShell)
+
+```powershell
+.\scripts\smoke_test_api.ps1
+```
+
+### 5) Переменные окружения (опционально)
+
+По умолчанию API ищет модель в `models/delivery_estimator.onnx`. Можно переопределить:
+
+- `MODEL_PATH` — путь к локальному ONNX файлу
+- `MODEL_REMOTE_PATH` — имя/путь объекта в бакете (для S3/MinIO)
+
+Если нужно показать полный сценарий ЛР3 **(обучили → загрузили в MinIO → API скачал и использовал)**:
+
+1) Поднимите MinIO:
+
+```bash
+docker compose up -d
+```
+
+В `docker-compose.yml` автоматически создаются бакеты:
+- `datasets` (ЛР2)
+- `models` (ЛР3)
+
+2) Создайте `.env` и укажите MinIO:
+
+```env
+MINIO_ENDPOINT=http://localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=datasets
+MINIO_MODEL_BUCKET=models
+```
+
+3) Обучите модель — скрипт сам зальёт `models/delivery_estimator.onnx` в MinIO (`s3://models/delivery_estimator.onnx`):
+
+```bash
+scripts\train_model.bat
+```
+
+4) Удалите локальный файл модели (чтобы убедиться, что API скачивает из MinIO):
+
+```bash
+del models\delivery_estimator.onnx
+```
+
+5) Запустите API — при первом обращении DI скачает модель из MinIO и использует её:
+
+```bash
+scripts\run_api.bat
+```

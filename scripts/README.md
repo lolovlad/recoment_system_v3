@@ -43,6 +43,68 @@ user_id,item_id
 
 ---
 
+## ЛР3 — Датасет и обучение модели (регрессия доставки)
+
+### 1) Генерация датасета (отдельно от обучения)
+
+#### generate_delivery_data.py / generate_delivery_data.bat
+
+Создаёт файл `data/delivery_train.csv` с признаками:
+
+- `distance` (float)
+- `hour` (int)
+- `day_of_week` (int)
+- `items_count` (int)
+- `delivery_minutes` (target)
+
+Запуск:
+
+```bash
+scripts\generate_delivery_data.bat
+
+# или через Python:
+poetry run python scripts/generate_delivery_data.py --rows 5000 --seed 42 --output data/delivery_train.csv
+```
+
+### 2) Добавление/обновление датасета в DVC (как в ЛР2)
+
+#### prepare_delivery_data_dvc.bat
+
+Ставит `data/delivery_train.csv` под контроль DVC и пушит в remote (MinIO):
+
+```bash
+scripts\prepare_delivery_data_dvc.bat
+```
+
+Ручные команды (аналогично `user_history.csv`):
+
+```bash
+dvc add data/delivery_train.csv
+dvc push
+```
+
+Чтобы добавить **новый датасет** (другой файл), делаете то же самое:
+
+```bash
+dvc add data/<new_dataset>.csv
+dvc push
+```
+
+### 3) Обучение и экспорт модели (ONNX) + авто‑upload в MinIO
+
+#### train_model.py / train_model.bat
+
+Скрипт обучает модель **из CSV** `data/delivery_train.csv`, сохраняет ONNX в `models/delivery_estimator.onnx` и затем (при наличии env) автоматически загружает модель в MinIO в бакет `models`.
+
+```bash
+scripts\train_model.bat
+
+# или:
+poetry run python scripts/train_model.py --seed 42 --data data/delivery_train.csv
+```
+
+---
+
 ## 2. Первичная настройка
 
 ### setup.bat

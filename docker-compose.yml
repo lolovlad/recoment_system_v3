@@ -31,8 +31,9 @@ services:
       sleep 5;
       mc alias set myminio http://minio:9000 minioadmin minioadmin;
       mc mb myminio/datasets --ignore-existing;
+      mc mb myminio/models --ignore-existing;
       mc anonymous set download myminio/datasets;
-      echo 'Бакет datasets создан успешно';
+      echo 'Бакеты datasets и models созданы успешно';
       "
     volumes:
       - minio_data:/data
