@@ -2,9 +2,11 @@ import argparse
 
 from ..domain.entities import UserHistory
 from ..application.service_factory import create_recommendation_service
+from ..env import load_project_env
 
 
 def main():
+    load_project_env()
     parser = argparse.ArgumentParser(description="Recommender System CLI")
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--items", default="")

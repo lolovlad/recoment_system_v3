@@ -12,6 +12,7 @@ ENV/
 env/
 
 .pytest_cache/
+.pytest_celery.sqlite
 .coverage
 htmlcov/
 

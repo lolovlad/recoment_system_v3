@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
+from recommender_system.env import load_project_env
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
@@ -31,7 +31,7 @@ def upload_model_to_minio(local_model_path: Path) -> bool:
       MINIO_MODEL_BUCKET (default: models)
       MODEL_REMOTE_PATH (default: delivery_estimator.onnx)
     """
-    load_dotenv()
+    load_project_env()
 
     endpoint = os.getenv("MINIO_ENDPOINT")
     access_key = os.getenv("MINIO_ACCESS_KEY")
@@ -56,6 +56,8 @@ def upload_model_to_minio(local_model_path: Path) -> bool:
 
 
 def main() -> None:
+    load_project_env()
+
     parser = argparse.ArgumentParser(description="Train delivery time model and export to ONNX")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out-model", type=str, default=str(Path("models") / "delivery_estimator.onnx"))

@@ -2,6 +2,28 @@
 
 Скрипты выстроены в порядке использования: сначала генерация данных, затем настройка и работа с версиями.
 
+**Переменные окружения:** общий файл **`.env`** в корне репозитория (шаблон — **`.env.example`**). Загрузка в Python через `recommender_system.env.load_project_env()` (см. корневой `README.md`).
+
+**Где что по моделям:**
+
+- **Рекомендательная система (ЛР1–2 + ЛР4):** обучение — **`train_recommendation_model.py`** → **`models/recommendation.onnx`** + **`models/recommendation_meta.json`** из **`data/user_history.csv`**, опционально upload в MinIO. Инференс в worker: ONNX Runtime + JSON; синк с MinIO при отсутствии файлов.
+- **Время доставки (ЛР3, ONNX):** обучение — **`train_delivery_model.py`** / **`train_model.bat`** (bat оставлено старым именем) → `models/delivery_estimator.onnx` из **`data/delivery_train.csv`** (`generate_delivery_data.py`). Инференс: `tasks.py` → `estimate_delivery_task`.
+
+### ЛР4 — скрипты запуска и проверки
+
+| Файл | Назначение |
+|------|------------|
+| `lab4_prepare_env.bat` | Копия `.env.example` → `.env` |
+| `lab4_ensure_data.bat` | Проверка/генерация `data/user_history.csv` |
+| `lab4_train_recommendation.bat` | Обучение `recommendation.onnx` + meta |
+| `lab4_docker_up.bat` | `docker compose up --build -d` |
+| `lab4_verify.py` | Автопроверка API (Python): `poetry run python scripts/lab4_verify.py [URL] [user_id]` |
+| `lab4_verify.ps1` | То же в PowerShell |
+| `lab4_run_tests.bat` | Pytest: тесты ЛР4 + обучение рекомендаций |
+| `lab4_quickstart.bat` | Цепочка: env → данные → обучение → Docker → verify |
+
+Пошаговый сценарий см. в корневом **README.md** (раздел «ЛР4 — пошаговый гайд»).
+
 ---
 
 ## 1. Генерация данных
@@ -90,9 +112,20 @@ dvc add data/<new_dataset>.csv
 dvc push
 ```
 
-### 3) Обучение и экспорт модели (ONNX) + авто‑upload в MinIO
+### 3) Обучение рекомендаций (TruncatedSVD → ONNX + JSON)
 
-#### train_model.py / train_model.bat
+#### train_recommendation_model.py / train_recommendation_model.bat
+
+По **`data/user_history.csv`** обучает `TruncatedSVD`, экспортирует скоринг в **`models/recommendation.onnx`**, метаданные — **`models/recommendation_meta.json`**, при настроенном MinIO загружает оба файла в бакет `models`.
+
+```bash
+scripts\train_recommendation_model.bat
+poetry run python scripts/train_recommendation_model.py --data data/user_history.csv --out models/recommendation.onnx --out-meta models/recommendation_meta.json
+```
+
+### 4) Обучение и экспорт модели доставки (ONNX) + авто‑upload в MinIO
+
+#### train_delivery_model.py / train_model.bat
 
 Скрипт обучает модель **из CSV** `data/delivery_train.csv`, сохраняет ONNX в `models/delivery_estimator.onnx` и затем (при наличии env) автоматически загружает модель в MinIO в бакет `models`.
 
@@ -100,7 +133,7 @@ dvc push
 scripts\train_model.bat
 
 # или:
-poetry run python scripts/train_model.py --seed 42 --data data/delivery_train.csv
+poetry run python scripts/train_delivery_model.py --seed 42 --data data/delivery_train.csv
 ```
 
 ---

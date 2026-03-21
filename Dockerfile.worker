@@ -1,0 +1,19 @@
+# Celery worker — тот же минимальный набор, что и у API.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir poetry \
+    && poetry config virtualenvs.create false
+
+COPY pyproject.toml poetry.lock* ./
+
+RUN poetry install --without dev --no-interaction --no-root
+
+COPY .env ./.env
+
+COPY src ./src
+
+ENV PYTHONPATH=/app/src
+
+CMD ["celery", "-A", "recommender_system.presentation.celery_app:celery_app", "worker", "--loglevel=info"]

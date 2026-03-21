@@ -1,13 +1,14 @@
 import os
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
-from recommender_system.infrastructure.s3_storage import S3Storage
-from recommender_system.application.data_sync_service import DataSyncService
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-load_dotenv()
+from recommender_system.application.data_sync_service import DataSyncService
+from recommender_system.env import load_project_env
+from recommender_system.infrastructure.s3_storage import S3Storage
+
+load_project_env()
 
 
 def main():

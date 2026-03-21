@@ -35,9 +35,9 @@ def client(monkeypatch) -> TestClient:
         monkeypatch.delenv("MINIO_MODEL_BUCKET", raising=False)
         monkeypatch.delenv("MODEL_REMOTE_PATH", raising=False)
 
-        from src.recommender_system.presentation import dependencies as deps
+        from src.recommender_system.presentation import tasks as task_mod
 
-        deps.get_inference_service.cache_clear()
+        task_mod._get_inference_service_singleton.cache_clear()
 
         from src.recommender_system.presentation.api import app
 
@@ -49,10 +49,19 @@ def test_post_estimate_time_success(client: TestClient) -> None:
         "/api/v1/delivery/estimate_time",
         json={"distance": 12.5, "hour": 18, "day_of_week": 5, "items_count": 3},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 202
     payload = resp.json()
-    assert set(payload.keys()) == {"estimated_minutes"}
-    assert isinstance(payload["estimated_minutes"], (int, float))
+    assert set(payload.keys()) == {"task_id"}
+    task_id = payload["task_id"]
+    assert isinstance(task_id, str)
+
+    r2 = client.get(f"/api/v1/delivery/results/{task_id}")
+    assert r2.status_code == 200
+    body = r2.json()
+    assert body["task_id"] == task_id
+    assert body["status"] == "SUCCESS"
+    assert body["result"] is not None
+    assert isinstance(body["result"], (int, float))
 
 
 @pytest.mark.parametrize(

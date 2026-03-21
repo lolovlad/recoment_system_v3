@@ -3,8 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
-
+from ..env import load_project_env
 from ..application.services import InferenceService, ModelSyncService, ModelSyncSpec
 from ..infrastructure.onnx_model import ONNXModel
 from ..infrastructure.s3_storage import S3Storage
@@ -14,7 +13,7 @@ import os
 
 @lru_cache
 def get_inference_service() -> InferenceService:
-    load_dotenv()
+    load_project_env()
 
     model_path = os.getenv("MODEL_PATH", str(Path("models") / "delivery_estimator.onnx"))
     model_remote_path = os.getenv("MODEL_REMOTE_PATH", "delivery_estimator.onnx")

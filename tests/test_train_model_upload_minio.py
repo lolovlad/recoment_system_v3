@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 
 def test_upload_model_to_minio_uses_models_bucket_by_default(monkeypatch, tmp_path: Path):
-    from scripts.train_model import upload_model_to_minio
+    from scripts.train_delivery_model import upload_model_to_minio
 
     model_path = tmp_path / "delivery_estimator.onnx"
     model_path.write_bytes(b"fake")
@@ -17,7 +17,7 @@ def test_upload_model_to_minio_uses_models_bucket_by_default(monkeypatch, tmp_pa
     monkeypatch.delenv("MODEL_REMOTE_PATH", raising=False)
 
     mock_client = MagicMock()
-    with patch("scripts.train_model.boto3.client", return_value=mock_client) as mock_boto3_client:
+    with patch("scripts.train_delivery_model.boto3.client", return_value=mock_client) as mock_boto3_client:
         ok = upload_model_to_minio(model_path)
 
     assert ok is True
@@ -26,7 +26,7 @@ def test_upload_model_to_minio_uses_models_bucket_by_default(monkeypatch, tmp_pa
 
 
 def test_upload_model_to_minio_skips_when_env_missing(monkeypatch, tmp_path: Path):
-    from scripts.train_model import upload_model_to_minio
+    from scripts.train_delivery_model import upload_model_to_minio
 
     model_path = tmp_path / "delivery_estimator.onnx"
     model_path.write_bytes(b"fake")
@@ -35,9 +35,9 @@ def test_upload_model_to_minio_skips_when_env_missing(monkeypatch, tmp_path: Pat
     monkeypatch.delenv("MINIO_ACCESS_KEY", raising=False)
     monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
 
-    # Важно: upload_model_to_minio() вызывает load_dotenv(), который может подтянуть
+    # Важно: upload_model_to_minio() вызывает load_project_env(), который может подтянуть
     # значения из локального .env. Для сценария "env отсутствует" отключаем это.
-    with patch("scripts.train_model.load_dotenv") as _mock_load_dotenv, patch("scripts.train_model.boto3.client") as mock_boto3_client:
+    with patch("scripts.train_delivery_model.load_project_env") as _mock_load_env, patch("scripts.train_delivery_model.boto3.client") as mock_boto3_client:
         ok = upload_model_to_minio(model_path)
 
     assert ok is False

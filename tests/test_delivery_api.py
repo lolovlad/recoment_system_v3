@@ -34,9 +34,9 @@ def test_api_estimate_time_returns_estimated_minutes(monkeypatch):
         monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
         monkeypatch.delenv("MINIO_BUCKET", raising=False)
 
-        from src.recommender_system.presentation import dependencies as deps  # noqa: WPS433
+        from src.recommender_system.presentation import tasks as task_mod  # noqa: WPS433
 
-        deps.get_inference_service.cache_clear()
+        task_mod._get_inference_service_singleton.cache_clear()
 
         from src.recommender_system.presentation.api import app  # noqa: WPS433
 
@@ -46,8 +46,14 @@ def test_api_estimate_time_returns_estimated_minutes(monkeypatch):
             "/api/v1/delivery/estimate_time",
             json={"distance": 12.5, "hour": 18, "day_of_week": 5, "items_count": 3},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
-        assert "estimated_minutes" in data
-        assert isinstance(data["estimated_minutes"], (int, float))
+        assert "task_id" in data
+        tid = data["task_id"]
+        r2 = client.get(f"/api/v1/delivery/results/{tid}")
+        assert r2.status_code == 200
+        out = r2.json()
+        assert out["status"] == "SUCCESS"
+        assert out["result"] is not None
+        assert isinstance(out["result"], (int, float))
 
