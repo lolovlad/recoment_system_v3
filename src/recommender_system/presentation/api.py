@@ -1,5 +1,6 @@
 """
-FastAPI: асинхронные рекомендации через Celery.
+FastAPI: постановка задач и чтение результатов из Celery backend.
+Модели, MinIO и история пользователей обрабатываются только в worker.
 """
 from __future__ import annotations
 

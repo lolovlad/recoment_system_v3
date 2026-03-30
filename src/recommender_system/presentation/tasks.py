@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..application.service_factory import create_recommendation_service
 from ..domain.entities import UserHistory
 from ..env import load_project_env
 from .celery_app import celery_app
@@ -30,7 +29,9 @@ def _recommendation_top_n() -> int:
 
 @lru_cache(maxsize=1)
 def _get_recommendation_service_singleton():
-    """Синглтон RecommendationService + CollaborativeMockModel (ЛР1)."""
+    """Синглтон RecommendationService (модель, MinIO, CSV — только в worker)."""
+    from ..application.service_factory import create_recommendation_service
+
     return create_recommendation_service()
 
 
