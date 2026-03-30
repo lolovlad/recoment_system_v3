@@ -11,7 +11,7 @@ def test_ensure_model_exists_downloads_when_missing():
     storage = MagicMock()
     service = ModelSyncService(storage=storage)
 
-    spec = ModelSyncSpec(remote_path="delivery_estimator.onnx", local_path="models/delivery_estimator.onnx")
+    spec = ModelSyncSpec(remote_path="recommendation.onnx", local_path="models/recommendation.onnx")
 
     with patch("src.recommender_system.application.services.os.path.exists", return_value=False):
         service.ensure_model_exists(spec)
@@ -23,7 +23,7 @@ def test_ensure_model_exists_does_not_download_when_present():
     storage = MagicMock()
     service = ModelSyncService(storage=storage)
 
-    spec = ModelSyncSpec(remote_path="delivery_estimator.onnx", local_path="models/delivery_estimator.onnx")
+    spec = ModelSyncSpec(remote_path="recommendation.onnx", local_path="models/recommendation.onnx")
 
     with patch("src.recommender_system.application.services.os.path.exists", return_value=True):
         service.ensure_model_exists(spec)
@@ -33,7 +33,7 @@ def test_ensure_model_exists_does_not_download_when_present():
 
 def test_ensure_model_exists_raises_when_no_storage_and_missing():
     service = ModelSyncService(storage=None)
-    spec = ModelSyncSpec(remote_path="delivery_estimator.onnx", local_path="models/delivery_estimator.onnx")
+    spec = ModelSyncSpec(remote_path="recommendation.onnx", local_path="models/recommendation.onnx")
 
     with patch("src.recommender_system.application.services.os.path.exists", return_value=False):
         with pytest.raises(FileNotFoundError):

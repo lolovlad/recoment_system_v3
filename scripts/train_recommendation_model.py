@@ -1,17 +1,8 @@
 """
+Обучение модели рекомендаций по ``user_history.csv`` (ЛР1-ЛР4).
 
-Обучение модели рекомендаций по ``user_history.csv`` (ЛР1–2).
-
-
-
-Обучает TruncatedSVD, экспортирует скоринг в **ONNX** + JSON метаданные,
-
-опционально загружает оба файла в MinIO (бакет ``models``).
-
-
-
-Не путать с ``train_delivery_model.py`` (ЛР3: доставка, отдельный ONNX).
-
+Обучает TruncatedSVD, экспортирует скоринг в ONNX + JSON метаданные
+и опционально загружает оба файла в MinIO (бакет ``models``).
 """
 
 from __future__ import annotations
@@ -40,17 +31,24 @@ from sklearn.decomposition import TruncatedSVD
 
 import boto3
 
-
-
-from recommender_system.env import load_project_env
-
-from recommender_system.infrastructure.recommendation_artifacts import (
-    local_meta_path,
-    local_onnx_path,
-    remote_meta_key,
-    remote_onnx_key,
-)
-from recommender_system.infrastructure.recommendation_onnx_export import export_recommendation_scores_onnx
+try:
+    from recommender_system.env import load_project_env
+    from recommender_system.infrastructure.recommendation_artifacts import (
+        local_meta_path,
+        local_onnx_path,
+        remote_meta_key,
+        remote_onnx_key,
+    )
+    from recommender_system.infrastructure.recommendation_onnx_export import export_recommendation_scores_onnx
+except ModuleNotFoundError:
+    from src.recommender_system.env import load_project_env
+    from src.recommender_system.infrastructure.recommendation_artifacts import (
+        local_meta_path,
+        local_onnx_path,
+        remote_meta_key,
+        remote_onnx_key,
+    )
+    from src.recommender_system.infrastructure.recommendation_onnx_export import export_recommendation_scores_onnx
 
 
 

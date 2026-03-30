@@ -24,10 +24,14 @@ def test_train_recommendation_saves_onnx_and_meta(tmp_path: Path) -> None:
 
     assert out_onnx.is_file()
     assert out_meta.is_file()
-    from recommender_system.infrastructure.trained_recommender import TrainedRecommenderModel
+    try:
+        from recommender_system.infrastructure.trained_recommender import TrainedRecommenderModel
+        from recommender_system.domain.entities import UserHistory
+    except ModuleNotFoundError:
+        from src.recommender_system.infrastructure.trained_recommender import TrainedRecommenderModel
+        from src.recommender_system.domain.entities import UserHistory
 
     m = TrainedRecommenderModel(out_onnx, out_meta, top_n=5)
-    from recommender_system.domain.entities import UserHistory
 
     rec = m.get_recommendations(UserHistory(user_id="1", last_items=["10"]))
     assert isinstance(rec.suggested_items, list)

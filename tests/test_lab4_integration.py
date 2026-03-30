@@ -3,11 +3,13 @@
 """
 from __future__ import annotations
 
+import uuid
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.recommender_system.presentation import api as api_mod
 from src.recommender_system.presentation.api import app
 
 
@@ -16,7 +18,18 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_full_recommendation_cycle(client: TestClient) -> None:
+def test_full_recommendation_cycle(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    task_id = str(uuid.uuid4())
+    monkeypatch.setattr(
+        api_mod.generate_recommendations_for_user,
+        "delay",
+        lambda _user_id: MagicMock(id=task_id),
+    )
+    monkeypatch.setattr(
+        api_mod,
+        "AsyncResult",
+        lambda _task_id, app=None: MagicMock(state="SUCCESS", result=[10, 20], successful=lambda: True),
+    )
     r1 = client.post("/api/v1/recommendations/generate_for_user", json={"user_id": 42})
     assert r1.status_code == 202
     task_id = r1.json()["task_id"]
@@ -31,12 +44,21 @@ def test_full_recommendation_cycle(client: TestClient) -> None:
 
 def test_full_cycle_worker_failure_exposed_via_get(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Падение worker → GET /results возвращает FAILURE и error."""
-    from src.recommender_system.presentation import tasks as task_mod
-
-    task_mod._get_recommendation_service_singleton.cache_clear()
-    mock_svc = MagicMock()
-    mock_svc.get_recommendations.side_effect = RuntimeError("worker down")
-    monkeypatch.setattr(task_mod, "_get_recommendation_service_singleton", lambda: mock_svc)
+    task_id = str(uuid.uuid4())
+    monkeypatch.setattr(
+        api_mod.generate_recommendations_for_user,
+        "delay",
+        lambda _user_id: MagicMock(id=task_id),
+    )
+    monkeypatch.setattr(
+        api_mod,
+        "AsyncResult",
+        lambda _task_id, app=None: MagicMock(
+            state="FAILURE",
+            result=RuntimeError("worker down"),
+            successful=lambda: False,
+        ),
+    )
 
     r1 = client.post("/api/v1/recommendations/generate_for_user", json={"user_id": 1})
     assert r1.status_code == 202
