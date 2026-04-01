@@ -1,0 +1,127 @@
+name: CI/CD Recommender System
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install --upgrade pip poetry
+
+      - name: Install dependencies
+        run: |
+          poetry config virtualenvs.create false
+          poetry install
+
+      - name: Lint
+        run: |
+          pip install --upgrade ruff
+          poetry run ruff check .
+
+      - name: Run tests
+        run: poetry run python -m pytest -q
+
+  train:
+    name: Train model & log to MLflow
+    runs-on: self-hosted
+    needs: test
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install --upgrade pip poetry
+
+      - name: Install dependencies
+        run: |
+          poetry config virtualenvs.create false
+          poetry install
+
+      - name: Configure DVC remotes
+        shell: bash
+        env:
+          DVC_ACCESS_KEY_ID: ${{ secrets.DVC_ACCESS_KEY_ID }}
+          DVC_SECRET_ACCESS_KEY: ${{ secrets.DVC_SECRET_ACCESS_KEY }}
+          DVC_ENDPOINTURL: ${{ secrets.DVC_ENDPOINTURL }}
+        run: |
+          if [ -z "$DVC_ACCESS_KEY_ID" ] || [ -z "$DVC_SECRET_ACCESS_KEY" ]; then
+            echo "DVC secrets are not set (DVC_ACCESS_KEY_ID / DVC_SECRET_ACCESS_KEY)"
+            exit 1
+          fi
+
+          poetry run dvc remote modify --local myremote access_key_id "$DVC_ACCESS_KEY_ID"
+          poetry run dvc remote modify --local myremote secret_access_key "$DVC_SECRET_ACCESS_KEY"
+          if [ -n "$DVC_ENDPOINTURL" ]; then
+            poetry run dvc remote modify myremote endpointurl "$DVC_ENDPOINTURL"
+          fi
+
+          # Если в проекте есть отдельный remote для моделей — тоже настраиваем.
+          if poetry run dvc remote list | grep -q "^models_storage"; then
+            poetry run dvc remote modify --local models_storage access_key_id "$DVC_ACCESS_KEY_ID"
+            poetry run dvc remote modify --local models_storage secret_access_key "$DVC_SECRET_ACCESS_KEY"
+            if [ -n "$DVC_ENDPOINTURL" ]; then
+              poetry run dvc remote modify models_storage endpointurl "$DVC_ENDPOINTURL"
+            fi
+          fi
+
+      - name: Pull dataset from DVC
+        run: poetry run dvc pull
+
+      - name: Train model and log to MLflow
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_EXPERIMENT_NAME: lab5_variant7_recommender
+          AWS_ACCESS_KEY_ID: ${{ secrets.DVC_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DVC_SECRET_ACCESS_KEY }}
+          MLFLOW_S3_ENDPOINT_URL: ${{ secrets.DVC_ENDPOINTURL }}
+        run: |
+          if [ -z "$MLFLOW_TRACKING_URI" ]; then
+            echo "MLFLOW_TRACKING_URI secret is not set"
+            exit 1
+          fi
+          poetry run python scripts/train_recommendation_model.py --data data/user_history.csv
+
+  build:
+    name: Build Docker images locally
+    runs-on: self-hosted
+    needs: train
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Create .env file
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          REDIS_URL=redis://redis:6379/0
+          MINIO_ENDPOINT=http://minio:9000
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin
+          MINIO_MODEL_BUCKET=models
+          EOF
+
+      - name: Build API image
+        run: docker build -f Dockerfile -t recsys-api:latest .
+
+      - name: Build Worker image
+        run: docker build -f Dockerfile.worker -t recsys-worker:latest .
+

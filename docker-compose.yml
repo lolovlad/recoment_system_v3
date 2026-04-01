@@ -71,17 +71,11 @@ services:
       - "9000:9000" # API
       - "9001:9001" # Console
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
     networks:
       - app_net
 
@@ -94,16 +88,44 @@ services:
     entrypoint: >
       /bin/sh -c "
       sleep 5;
-      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
       mc mb myminio/datasets --ignore-existing;
       mc mb myminio/models --ignore-existing;
+      mc mb myminio/${MLFLOW_BUCKET:-mlflow} --ignore-existing;
       mc anonymous set download myminio/datasets;
-      echo 'Бакеты datasets и models созданы успешно';
+      echo 'Бакеты datasets, models и ${MLFLOW_BUCKET:-mlflow} созданы успешно';
       "
     volumes:
       - minio_data:/data
     networks:
       - app_net
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow_server_v3
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_S3_IGNORE_TLS: "true"
+    depends_on:
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    networks:
+      - app_net
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root s3://${MLFLOW_BUCKET:-mlflow}/artifacts/
+    volumes:
+      - ./data/mlflow:/mlflow
 
 volumes:
   minio_data:

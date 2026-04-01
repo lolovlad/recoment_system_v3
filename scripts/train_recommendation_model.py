@@ -295,6 +295,12 @@ def main() -> None:
     parser.add_argument("--components", type=int, default=32, help="SVD components (capped by data size)")
 
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--mlflow-experiment",
+        type=str,
+        default=os.getenv("MLFLOW_EXPERIMENT_NAME", "lab5_variant7_recommender"),
+        help="Имя MLflow experiment",
+    )
 
     args = parser.parse_args()
 
@@ -316,23 +322,53 @@ def main() -> None:
 
     out_meta = Path(args.out_meta) if args.out_meta else local_meta_path()
 
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    mlflow_mod = None
+    if tracking_uri:
+        try:
+            import mlflow as _mlflow  # type: ignore
+
+            mlflow_mod = _mlflow
+            mlflow_mod.set_tracking_uri(tracking_uri)
+            mlflow_mod.set_experiment(args.mlflow_experiment)
+        except Exception as e:
+            print(f"WARNING: MLFLOW_TRACKING_URI задан, но mlflow недоступен: {e}. Продолжаю без логирования.")
+            mlflow_mod = None
+
+    with (mlflow_mod.start_run(run_name="train_recommendation_model") if mlflow_mod else _nullcontext()):
+        if mlflow_mod:
+            mlflow_mod.log_params(
+                {
+                    "components_requested": int(args.components),
+                    "seed": int(args.seed),
+                    "data_path": str(data_path),
+                }
+            )
+
+        # обучаем и сохраняем артефакты в models/
+        train_and_save(
+            data_path=data_path,
+            out_onnx=out_onnx,
+            out_meta=out_meta,
+            n_components=args.components,
+            random_state=args.seed,
+        )
+
+        # логируем артефакты в MLflow (MinIO через mlflow server)
+        if mlflow_mod:
+            mlflow_mod.log_artifact(str(out_onnx), artifact_path="recommendation_artifacts")
+            mlflow_mod.log_artifact(str(out_meta), artifact_path="recommendation_artifacts")
+
+        # синк артефактов рекомендаций в MinIO bucket models (для worker)
+        upload_recommendation_to_minio(out_onnx, out_meta)
 
 
-    train_and_save(
+class _nullcontext:
+    def __enter__(self):
+        return None
 
-        data_path=data_path,
-
-        out_onnx=out_onnx,
-
-        out_meta=out_meta,
-
-        n_components=args.components,
-
-        random_state=args.seed,
-
-    )
-
-    upload_recommendation_to_minio(out_onnx, out_meta)
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
 

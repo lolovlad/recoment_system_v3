@@ -38,5 +38,6 @@ data/*.csv
 data/*.json
 data/*.pkl
 data/*.parquet
+data/mlflow/
 !data/*.dvc
 !data/.gitkeep
