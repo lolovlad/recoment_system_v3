@@ -132,7 +132,7 @@ jobs:
             echo "MLFLOW_TRACKING_URI secret is not set"
             exit 1
           fi
-          poetry run python scripts/train_recommendation_model.py --data data/user_history.csv
+          poetry run python scripts/train_recommendation_model.py --data data/user_history.csv --require-mlflow
 
   build:
     name: Build Docker images locally

@@ -121,8 +121,7 @@ def train_and_save(
     n_components: int,
 
     random_state: int,
-
-) -> None:
+) -> dict[str, float]:
 
     df = pd.read_csv(data_path)
 
@@ -242,6 +241,13 @@ def train_and_save(
 
     print(f"  users={n_users}, items={n_items}, n_components={k}")
 
+    return {
+        "users_count": float(n_users),
+        "items_count": float(n_items),
+        "n_components_actual": float(k),
+        "explained_variance_ratio_sum": float(np.sum(svd.explained_variance_ratio_)),
+    }
+
 
 
 
@@ -301,6 +307,11 @@ def main() -> None:
         default=os.getenv("MLFLOW_EXPERIMENT_NAME", "lab5_variant7_recommender"),
         help="Имя MLflow experiment",
     )
+    parser.add_argument(
+        "--require-mlflow",
+        action="store_true",
+        help="Падать с ошибкой, если MLFLOW_TRACKING_URI задан, но mlflow недоступен.",
+    )
 
     args = parser.parse_args()
 
@@ -332,6 +343,8 @@ def main() -> None:
             mlflow_mod.set_tracking_uri(tracking_uri)
             mlflow_mod.set_experiment(args.mlflow_experiment)
         except Exception as e:
+            if args.require_mlflow:
+                raise RuntimeError(f"MLFLOW_TRACKING_URI задан, но mlflow недоступен: {e}") from e
             print(f"WARNING: MLFLOW_TRACKING_URI задан, но mlflow недоступен: {e}. Продолжаю без логирования.")
             mlflow_mod = None
 
@@ -346,7 +359,7 @@ def main() -> None:
             )
 
         # обучаем и сохраняем артефакты в models/
-        train_and_save(
+        metrics = train_and_save(
             data_path=data_path,
             out_onnx=out_onnx,
             out_meta=out_meta,
@@ -356,6 +369,7 @@ def main() -> None:
 
         # логируем артефакты в MLflow (MinIO через mlflow server)
         if mlflow_mod:
+            mlflow_mod.log_metrics(metrics)
             mlflow_mod.log_artifact(str(out_onnx), artifact_path="recommendation_artifacts")
             mlflow_mod.log_artifact(str(out_meta), artifact_path="recommendation_artifacts")
 
