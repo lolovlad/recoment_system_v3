@@ -173,9 +173,33 @@ jobs:
           MINIO_MODEL_BUCKET=models
           EOF
 
+      - name: Resolve Docker CLI
+        id: docker_cli
+        shell: bash
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            echo "docker_bin=docker" >> "$GITHUB_OUTPUT"
+            docker --version
+            exit 0
+          fi
+
+          if [ -x "/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" ]; then
+            echo "docker_bin=/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" >> "$GITHUB_OUTPUT"
+            "/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" --version
+            exit 0
+          fi
+
+          echo "Docker CLI not found in runner environment."
+          echo "If this is WSL2 runner, enable Docker Desktop -> Settings -> Resources -> WSL Integration."
+          exit 1
+
       - name: Build API image
-        run: docker build -f Dockerfile -t recsys-api:latest .
+        shell: bash
+        run: |
+          "${{ steps.docker_cli.outputs.docker_bin }}" build -f Dockerfile -t recsys-api:latest .
 
       - name: Build Worker image
-        run: docker build -f Dockerfile.worker -t recsys-worker:latest .
+        shell: bash
+        run: |
+          "${{ steps.docker_cli.outputs.docker_bin }}" build -f Dockerfile.worker -t recsys-worker:latest .
 
