@@ -43,6 +43,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Debug context (safe)
+        shell: bash
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          echo "actor=${{ github.actor }}"
+          echo "repository=${{ github.repository }}"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -61,39 +69,65 @@ jobs:
         env:
           DVC_ACCESS_KEY_ID: ${{ secrets.DVC_ACCESS_KEY_ID }}
           DVC_SECRET_ACCESS_KEY: ${{ secrets.DVC_SECRET_ACCESS_KEY }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           DVC_ENDPOINTURL: ${{ secrets.DVC_ENDPOINTURL }}
         run: |
-          if [ -z "$DVC_ACCESS_KEY_ID" ] || [ -z "$DVC_SECRET_ACCESS_KEY" ]; then
-            echo "DVC secrets are not set (DVC_ACCESS_KEY_ID / DVC_SECRET_ACCESS_KEY)"
+          echo "DVC_ACCESS_KEY_ID present? $([ -n "$DVC_ACCESS_KEY_ID" ] && echo yes || echo no)"
+          echo "DVC_SECRET_ACCESS_KEY present? $([ -n "$DVC_SECRET_ACCESS_KEY" ] && echo yes || echo no)"
+          echo "MINIO_ACCESS_KEY present? $([ -n "$MINIO_ACCESS_KEY" ] && echo yes || echo no)"
+          echo "MINIO_SECRET_KEY present? $([ -n "$MINIO_SECRET_KEY" ] && echo yes || echo no)"
+          echo "DVC_ENDPOINTURL present? $([ -n "$DVC_ENDPOINTURL" ] && echo yes || echo no)"
+
+          ACCESS_KEY="${DVC_ACCESS_KEY_ID:-$MINIO_ACCESS_KEY}"
+          SECRET_KEY="${DVC_SECRET_ACCESS_KEY:-$MINIO_SECRET_KEY}"
+
+          if [ -z "$ACCESS_KEY" ] || [ -z "$SECRET_KEY" ]; then
+            echo "DVC secrets are not set. Provide DVC_ACCESS_KEY_ID/DVC_SECRET_ACCESS_KEY or MINIO_ACCESS_KEY/MINIO_SECRET_KEY"
             exit 1
           fi
 
-          poetry run dvc remote modify --local myremote access_key_id "$DVC_ACCESS_KEY_ID"
-          poetry run dvc remote modify --local myremote secret_access_key "$DVC_SECRET_ACCESS_KEY"
+          poetry run dvc remote modify --local myremote access_key_id "$ACCESS_KEY"
+          poetry run dvc remote modify --local myremote secret_access_key "$SECRET_KEY"
           if [ -n "$DVC_ENDPOINTURL" ]; then
             poetry run dvc remote modify myremote endpointurl "$DVC_ENDPOINTURL"
           fi
 
+          echo "Configured DVC remotes:"
+          poetry run dvc remote list
+
           # Если в проекте есть отдельный remote для моделей — тоже настраиваем.
           if poetry run dvc remote list | grep -q "^models_storage"; then
-            poetry run dvc remote modify --local models_storage access_key_id "$DVC_ACCESS_KEY_ID"
-            poetry run dvc remote modify --local models_storage secret_access_key "$DVC_SECRET_ACCESS_KEY"
+            poetry run dvc remote modify --local models_storage access_key_id "$ACCESS_KEY"
+            poetry run dvc remote modify --local models_storage secret_access_key "$SECRET_KEY"
             if [ -n "$DVC_ENDPOINTURL" ]; then
               poetry run dvc remote modify models_storage endpointurl "$DVC_ENDPOINTURL"
             fi
           fi
 
       - name: Pull dataset from DVC
-        run: poetry run dvc pull
+        shell: bash
+        run: |
+          echo "Running dvc pull..."
+          poetry run dvc pull
+          echo "Checking expected dataset file..."
+          if [ -f data/user_history.csv ]; then
+            echo "data/user_history.csv exists"
+          else
+            echo "data/user_history.csv missing after dvc pull"
+            exit 1
+          fi
 
       - name: Train model and log to MLflow
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           MLFLOW_EXPERIMENT_NAME: lab5_variant7_recommender
-          AWS_ACCESS_KEY_ID: ${{ secrets.DVC_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.DVC_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           MLFLOW_S3_ENDPOINT_URL: ${{ secrets.DVC_ENDPOINTURL }}
         run: |
+          echo "MLFLOW_TRACKING_URI present? $([ -n "$MLFLOW_TRACKING_URI" ] && echo yes || echo no)"
+          echo "MLFLOW_S3_ENDPOINT_URL present? $([ -n "$MLFLOW_S3_ENDPOINT_URL" ] && echo yes || echo no)"
           if [ -z "$MLFLOW_TRACKING_URI" ]; then
             echo "MLFLOW_TRACKING_URI secret is not set"
             exit 1
