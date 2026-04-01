@@ -187,11 +187,22 @@ poetry run python scripts/train_recommendation_model.py --data data/user_history
 
 Workflow: `.github/workflows/main.yml`
 
-Secrets:
-- `DOCKER_USERNAME`, `DOCKER_PASSWORD` — если пушите в Docker Hub (иначе используется GHCR)
-- `MLFLOW_TRACKING_URI` — URL MLflow, доступный с self-hosted runner
-- `DVC_ACCESS_KEY_ID`, `DVC_SECRET_ACCESS_KEY` — доступ к DVC remote (MinIO/S3)
-- `DVC_ENDPOINTURL` — endpoint для DVC remote (например `http://localhost:9000`)
+Secrets (GitHub Actions):
+
+Обязательные:
+- `MLFLOW_TRACKING_URI` — URL MLflow, доступный с self-hosted runner (пример: `http://localhost:5000`)
+- `DVC_ACCESS_KEY_ID` — access key для DVC remote / MinIO
+- `DVC_SECRET_ACCESS_KEY` — secret key для DVC remote / MinIO
+- `DVC_ENDPOINTURL` — endpoint S3/MinIO для DVC и MLflow artifact upload (пример: `http://localhost:9000`)
+
+Опциональные (fallback, если не заданы `DVC_*` ключи):
+- `MINIO_ACCESS_KEY`
+- `MINIO_SECRET_KEY`
+
+Примечание:
+- в workflow сначала используются `DVC_ACCESS_KEY_ID` / `DVC_SECRET_ACCESS_KEY`;
+- если они пустые, берутся `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`.
+- secrets, созданные как **Environment secrets**, доступны job только при указании `environment: <name>` в workflow.
 
 При push в `master`:
 - **test**: `poetry install` → `ruff check` → `pytest`

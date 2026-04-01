@@ -119,19 +119,39 @@ jobs:
           fi
 
       - name: Train model and log to MLflow
+        shell: bash
         env:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
           MLFLOW_EXPERIMENT_NAME: lab5_variant7_recommender
-          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          MLFLOW_S3_ENDPOINT_URL: ${{ secrets.DVC_ENDPOINTURL }}
+          DVC_ACCESS_KEY_ID: ${{ secrets.DVC_ACCESS_KEY_ID }}
+          DVC_SECRET_ACCESS_KEY: ${{ secrets.DVC_SECRET_ACCESS_KEY }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          DVC_ENDPOINTURL: ${{ secrets.DVC_ENDPOINTURL }}
         run: |
           echo "MLFLOW_TRACKING_URI present? $([ -n "$MLFLOW_TRACKING_URI" ] && echo yes || echo no)"
-          echo "MLFLOW_S3_ENDPOINT_URL present? $([ -n "$MLFLOW_S3_ENDPOINT_URL" ] && echo yes || echo no)"
           if [ -z "$MLFLOW_TRACKING_URI" ]; then
             echo "MLFLOW_TRACKING_URI secret is not set"
             exit 1
           fi
+
+          ACCESS_KEY="${DVC_ACCESS_KEY_ID:-$MINIO_ACCESS_KEY}"
+          SECRET_KEY="${DVC_SECRET_ACCESS_KEY:-$MINIO_SECRET_KEY}"
+          ENDPOINT="${DVC_ENDPOINTURL}"
+
+          echo "Resolved AWS access key present? $([ -n "$ACCESS_KEY" ] && echo yes || echo no)"
+          echo "Resolved AWS secret key present? $([ -n "$SECRET_KEY" ] && echo yes || echo no)"
+          echo "Resolved S3 endpoint present? $([ -n "$ENDPOINT" ] && echo yes || echo no)"
+
+          if [ -z "$ACCESS_KEY" ] || [ -z "$SECRET_KEY" ] || [ -z "$ENDPOINT" ]; then
+            echo "Missing credentials for MLflow artifact upload to S3/MinIO"
+            exit 1
+          fi
+
+          export AWS_ACCESS_KEY_ID="$ACCESS_KEY"
+          export AWS_SECRET_ACCESS_KEY="$SECRET_KEY"
+          export MLFLOW_S3_ENDPOINT_URL="$ENDPOINT"
+
           poetry run python scripts/train_recommendation_model.py --data data/user_history.csv --require-mlflow
 
   build:
