@@ -180,13 +180,14 @@ jobs:
           if command -v docker >/dev/null 2>&1; then
             echo "docker_bin=docker" >> "$GITHUB_OUTPUT"
             if docker ps >/dev/null 2>&1; then
-              echo "docker_cmd=docker" >> "$GITHUB_OUTPUT"
+              echo "use_sudo=false" >> "$GITHUB_OUTPUT"
             elif command -v sudo >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
-              echo "docker_cmd=sudo docker" >> "$GITHUB_OUTPUT"
+              echo "use_sudo=true" >> "$GITHUB_OUTPUT"
             else
-              echo "docker_cmd=docker" >> "$GITHUB_OUTPUT"
-              echo "WARNING: docker daemon access denied for current user."
-              echo "Fix on runner host: sudo usermod -aG docker $USER && newgrp docker"
+              echo "ERROR: docker daemon access denied for current user."
+              echo "Fix on runner host: sudo usermod -aG docker \$USER && newgrp docker"
+              echo "Or allow passwordless sudo for docker command."
+              exit 1
             fi
             docker --version || true
             exit 0
@@ -206,7 +207,7 @@ jobs:
       - name: Build API image
         shell: bash
         run: |
-          if [ "${{ steps.docker_cli.outputs.docker_cmd }}" = "sudo docker" ]; then
+          if [ "${{ steps.docker_cli.outputs.use_sudo }}" = "true" ]; then
             sudo docker build -f Dockerfile -t recsys-api:latest .
           else
             "${{ steps.docker_cli.outputs.docker_bin }}" build -f Dockerfile -t recsys-api:latest .
@@ -215,7 +216,7 @@ jobs:
       - name: Build Worker image
         shell: bash
         run: |
-          if [ "${{ steps.docker_cli.outputs.docker_cmd }}" = "sudo docker" ]; then
+          if [ "${{ steps.docker_cli.outputs.use_sudo }}" = "true" ]; then
             sudo docker build -f Dockerfile.worker -t recsys-worker:latest .
           else
             "${{ steps.docker_cli.outputs.docker_bin }}" build -f Dockerfile.worker -t recsys-worker:latest .
