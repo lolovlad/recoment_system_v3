@@ -35,6 +35,37 @@ jobs:
       - name: Run tests
         run: poetry run python -m pytest -q
 
+      - name: Configure DVC remotes
+        shell: bash
+        env:
+          DVC_ACCESS_KEY_ID: ${{ secrets.DVC_ACCESS_KEY_ID }}
+          DVC_SECRET_ACCESS_KEY: ${{ secrets.DVC_SECRET_ACCESS_KEY }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          DVC_ENDPOINTURL: ${{ secrets.DVC_ENDPOINTURL }}
+        run: |
+          ACCESS_KEY="${DVC_ACCESS_KEY_ID:-$MINIO_ACCESS_KEY}"
+          SECRET_KEY="${DVC_SECRET_ACCESS_KEY:-$MINIO_SECRET_KEY}"
+          if [ -z "$ACCESS_KEY" ] || [ -z "$SECRET_KEY" ]; then
+            echo "WARNING: DVC secrets are not set; trying to use existing .dvc/config.local credentials."
+          else
+            poetry run dvc remote modify --local myremote access_key_id "$ACCESS_KEY"
+            poetry run dvc remote modify --local myremote secret_access_key "$SECRET_KEY"
+            if [ -n "$DVC_ENDPOINTURL" ]; then
+              poetry run dvc remote modify myremote endpointurl "$DVC_ENDPOINTURL"
+            fi
+          fi
+
+      - name: Pull dataset from DVC (for quality gate)
+        shell: bash
+        run: |
+          poetry run dvc pull
+
+      - name: Quality gate NDCG@10 > 0.5
+        shell: bash
+        run: |
+          poetry run python scripts/quality_gate.py --data data/user_history.csv --threshold 0.5
+
   train:
     name: Train model & log to MLflow
     runs-on: self-hosted
@@ -81,16 +112,14 @@ jobs:
 
           ACCESS_KEY="${DVC_ACCESS_KEY_ID:-$MINIO_ACCESS_KEY}"
           SECRET_KEY="${DVC_SECRET_ACCESS_KEY:-$MINIO_SECRET_KEY}"
-
           if [ -z "$ACCESS_KEY" ] || [ -z "$SECRET_KEY" ]; then
-            echo "DVC secrets are not set. Provide DVC_ACCESS_KEY_ID/DVC_SECRET_ACCESS_KEY or MINIO_ACCESS_KEY/MINIO_SECRET_KEY"
-            exit 1
-          fi
-
-          poetry run dvc remote modify --local myremote access_key_id "$ACCESS_KEY"
-          poetry run dvc remote modify --local myremote secret_access_key "$SECRET_KEY"
-          if [ -n "$DVC_ENDPOINTURL" ]; then
-            poetry run dvc remote modify myremote endpointurl "$DVC_ENDPOINTURL"
+            echo "WARNING: DVC secrets are not set; trying to use existing .dvc/config.local credentials."
+          else
+            poetry run dvc remote modify --local myremote access_key_id "$ACCESS_KEY"
+            poetry run dvc remote modify --local myremote secret_access_key "$SECRET_KEY"
+            if [ -n "$DVC_ENDPOINTURL" ]; then
+              poetry run dvc remote modify myremote endpointurl "$DVC_ENDPOINTURL"
+            fi
           fi
 
           echo "Configured DVC remotes:"
@@ -98,10 +127,12 @@ jobs:
 
           # Если в проекте есть отдельный remote для моделей — тоже настраиваем.
           if poetry run dvc remote list | grep -q "^models_storage"; then
-            poetry run dvc remote modify --local models_storage access_key_id "$ACCESS_KEY"
-            poetry run dvc remote modify --local models_storage secret_access_key "$SECRET_KEY"
-            if [ -n "$DVC_ENDPOINTURL" ]; then
-              poetry run dvc remote modify models_storage endpointurl "$DVC_ENDPOINTURL"
+            if [ -n "$ACCESS_KEY" ] && [ -n "$SECRET_KEY" ]; then
+              poetry run dvc remote modify --local models_storage access_key_id "$ACCESS_KEY"
+              poetry run dvc remote modify --local models_storage secret_access_key "$SECRET_KEY"
+              if [ -n "$DVC_ENDPOINTURL" ]; then
+                poetry run dvc remote modify models_storage endpointurl "$DVC_ENDPOINTURL"
+              fi
             fi
           fi
 
@@ -137,7 +168,15 @@ jobs:
 
           ACCESS_KEY="${DVC_ACCESS_KEY_ID:-$MINIO_ACCESS_KEY}"
           SECRET_KEY="${DVC_SECRET_ACCESS_KEY:-$MINIO_SECRET_KEY}"
-          ENDPOINT="${DVC_ENDPOINTURL}"
+          ENDPOINT="${DVC_ENDPOINTURL:-$MLFLOW_S3_ENDPOINT_URL}"
+
+          # fallback на переменные окружения раннера (если secrets не прокинулись в job)
+          if [ -z "$ACCESS_KEY" ] && [ -n "${AWS_ACCESS_KEY_ID:-}" ]; then
+            ACCESS_KEY="$AWS_ACCESS_KEY_ID"
+          fi
+          if [ -z "$SECRET_KEY" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            SECRET_KEY="$AWS_SECRET_ACCESS_KEY"
+          fi
 
           echo "Resolved AWS access key present? $([ -n "$ACCESS_KEY" ] && echo yes || echo no)"
           echo "Resolved AWS secret key present? $([ -n "$SECRET_KEY" ] && echo yes || echo no)"
@@ -171,6 +210,7 @@ jobs:
           MINIO_ACCESS_KEY=minioadmin
           MINIO_SECRET_KEY=minioadmin
           MINIO_MODEL_BUCKET=models
+          MLFLOW_TRACKING_URI=http://mlflow:5000
           EOF
 
       - name: Resolve Docker CLI

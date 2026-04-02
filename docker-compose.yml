@@ -13,6 +13,7 @@ services:
       - app_net
 
   api:
+    image: recsys-api:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -40,6 +41,7 @@ services:
       - ./data:/app/data:ro
 
   worker:
+    image: recsys-worker:latest
     build:
       context: .
       dockerfile: Dockerfile.worker
@@ -53,6 +55,9 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_MODEL_BUCKET: models
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_MODEL_NAME: recsys_model
+      MLFLOW_MODEL_STAGE: Production
     depends_on:
       redis:
         condition: service_healthy

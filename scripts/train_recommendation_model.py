@@ -107,6 +107,41 @@ def upload_recommendation_to_minio(onnx_path: Path, meta_path: Path) -> bool:
     return True
 
 
+def _build_interaction_matrix(df: pd.DataFrame) -> tuple[sparse.csr_matrix, list[str]]:
+    """
+    Создаёт матрицу взаимодействий для TruncatedSVD.
+
+    Совпадает по логике с train_and_save:
+    - unique по (user_id, item_id)
+    - user/item множества отсортированы
+    """
+    df = df.dropna(subset=["user_id", "item_id"]).copy()
+    df["user_id"] = df["user_id"].astype(str)
+    df["item_id"] = df["item_id"].astype(str)
+
+    unique_users = sorted(df["user_id"].unique())
+    unique_items = sorted(df["item_id"].unique())
+
+    user_id_to_row = {u: i for i, u in enumerate(unique_users)}
+    item_to_col = {it: j for j, it in enumerate(unique_items)}
+
+    rows: list[int] = []
+    cols: list[int] = []
+    seen: set[tuple[str, str]] = set()
+    for _, r in df.iterrows():
+        u, it = str(r["user_id"]), str(r["item_id"])
+        key = (u, it)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(user_id_to_row[u])
+        cols.append(item_to_col[it])
+
+    data = np.ones(len(rows), dtype=np.float32)
+    x = sparse.csr_matrix((data, (rows, cols)), shape=(len(unique_users), len(unique_items)))
+    return x, unique_items
+
+
 
 
 
@@ -249,6 +284,76 @@ def train_and_save(
     }
 
 
+def _compute_ndcg_at_k(
+    *,
+    df: pd.DataFrame,
+    components: np.ndarray,
+    item_ids_ordered: list[str],
+    user_id_to_seq: dict[str, list[str]],
+    k: int = 10,
+    history_limit: int = 50,
+) -> float:
+    """
+    Quality metric NDCG@k с бинарной релевантностью.
+
+    Поскольку производство использует TrainedRecommenderModel (score и tie-break по индексу),
+    считаем скоринг по тем же формулам MatMul (см. export_recommendation_scores_onnx).
+    """
+    import math
+
+    n_items = len(item_ids_ordered)
+    if n_items == 0:
+        return 0.0
+
+    item_to_col = {it: j for j, it in enumerate(item_ids_ordered)}
+    w1 = components.T  # (n_items, factors)
+    w2 = components  # (factors, n_items)
+
+    # Для бинарной релевантности idcg=1/log2(2)=1 => ndcg = dcg = 1/log2(rank+1) если попал в топ-k.
+    ndcgs: list[float] = []
+    for uid in sorted(user_id_to_seq.keys()):
+        seq = user_id_to_seq[uid]
+        if len(seq) < 2:
+            continue
+        positive_item = seq[-1]
+        history_items = [it for it in seq[:-1] if it != positive_item][-history_limit:]
+        x = np.zeros((1, n_items), dtype=np.float32)
+        for it in history_items:
+            col = item_to_col.get(it)
+            if col is not None:
+                x[0, col] = 1.0
+
+        latent = x @ w1  # (1, factors)
+        scores = latent @ w2  # (1, n_items)
+        scores = np.asarray(scores).ravel()
+
+        exclude = set(history_items)
+        ranked: list[tuple[float, int]] = []
+        for j in range(n_items):
+            item_str = item_ids_ordered[j]
+            if item_str in exclude:
+                continue
+            ranked.append((float(scores[j]), j))
+        ranked.sort(key=lambda t: (-t[0], t[1]))
+        top = ranked[:k]
+
+        positive_col = item_to_col.get(positive_item)
+        if positive_col is None:
+            continue
+
+        dcg = 0.0
+        for idx, (_, col) in enumerate(top):
+            if col == positive_col:
+                rank = idx + 1
+                dcg = 1.0 / math.log2(rank + 1.0)
+                break
+        ndcgs.append(dcg)
+
+    if not ndcgs:
+        return 0.0
+    return float(np.mean(ndcgs))
+
+
 
 
 
@@ -312,6 +417,9 @@ def main() -> None:
         action="store_true",
         help="Падать с ошибкой, если MLFLOW_TRACKING_URI задан, но mlflow недоступен.",
     )
+    parser.add_argument("--ndcg-threshold", type=float, default=0.5)
+    parser.add_argument("--ndcg-k", type=int, default=10)
+    parser.add_argument("--register-model-name", type=str, default="recsys_model")
 
     args = parser.parse_args()
 
@@ -348,6 +456,21 @@ def main() -> None:
             print(f"WARNING: MLFLOW_TRACKING_URI задан, но mlflow недоступен: {e}. Продолжаю без логирования.")
             mlflow_mod = None
 
+    # Загружаем df повторно, чтобы посчитать NDCG по последовательности из CSV.
+    df = pd.read_csv(data_path)
+    df = df.dropna(subset=["user_id", "item_id"]).copy()
+    df["user_id"] = df["user_id"].astype(str)
+    df["item_id"] = df["item_id"].astype(str)
+
+    user_id_to_seq: dict[str, list[str]] = {}
+    for uid, grp in df.groupby("user_id"):
+        # order by appearance in CSV
+        seq = grp["item_id"].astype(str).tolist()
+        user_id_to_seq[str(uid)] = seq
+
+    # item_ids_ordered будет взят из матрицы (sorted unique items) внутри блока расчёта NDCG.
+    item_ids_ordered = sorted(df["item_id"].unique())
+
     with (mlflow_mod.start_run(run_name="train_recommendation_model") if mlflow_mod else _nullcontext()):
         if mlflow_mod:
             mlflow_mod.log_params(
@@ -369,11 +492,61 @@ def main() -> None:
 
         # логируем артефакты в MLflow (MinIO через mlflow server)
         if mlflow_mod:
+            # Восстановим SVD components для расчёта NDCG.
+            x, item_ids_ordered_for_svd = _build_interaction_matrix(df)
+            k_factors = int(metrics["n_components_actual"])
+            svd_for_ndcg = TruncatedSVD(n_components=k_factors, random_state=args.seed)
+            svd_for_ndcg.fit(x)
+            ndcg = _compute_ndcg_at_k(
+                df=df,
+                components=svd_for_ndcg.components_.astype(np.float32),
+                item_ids_ordered=item_ids_ordered_for_svd,
+                user_id_to_seq=user_id_to_seq,
+                k=args.ndcg_k,
+            )
+
+            mlflow_mod.log_params(
+                {
+                    "factors_actual": int(k_factors),
+                    "ndcg_k": int(args.ndcg_k),
+                }
+            )
+            mlflow_mod.log_metric(f"ndcg@{args.ndcg_k}", float(ndcg))
             mlflow_mod.log_metrics(metrics)
             mlflow_mod.log_artifact(str(out_onnx), artifact_path="recommendation_artifacts")
             mlflow_mod.log_artifact(str(out_meta), artifact_path="recommendation_artifacts")
 
-        # синк артефактов рекомендаций в MinIO bucket models (для worker)
+            # Логируем sklearn-модель для регистрации и получения run_id при download из worker.
+            try:
+                mlflow_mod.sklearn.log_model(svd_for_ndcg, artifact_path="sklearn_model")
+            except Exception as e:
+                raise RuntimeError(f"Failed to log sklearn model to MLflow: {e}") from e
+
+            # Register model under required name; promote to Production only if quality gate passed.
+            from mlflow.tracking import MlflowClient
+
+            run_id = mlflow_mod.active_run().info.run_id
+            model_uri = f"runs:/{run_id}/sklearn_model"
+            registered = mlflow_mod.register_model(model_uri, args.register_model_name)
+            version = registered.version
+
+            gate_passed = float(ndcg) > args.ndcg_threshold
+            mlflow_mod.set_tag("quality_gate_passed", "true" if gate_passed else "false")
+
+            if gate_passed:
+                client = MlflowClient()
+                client.transition_model_version_stage(
+                    name=args.register_model_name,
+                    version=str(version),
+                    stage="Production",
+                    archive_existing_versions=True,
+                )
+            else:
+                raise RuntimeError(
+                    f"Quality gate failed: ndcg@{args.ndcg_k}={ndcg:.4f} <= {args.ndcg_threshold}"
+                )
+
+        # синк артефактов рекомендаций в MinIO bucket models (fallback для worker)
         upload_recommendation_to_minio(out_onnx, out_meta)
 
 

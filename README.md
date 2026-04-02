@@ -145,20 +145,20 @@ poetry run pytest
 
 ---
 
-## ЛР5 (вариант 7): CI/CD + MLflow (Postgres + MinIO) + self-hosted runner
+## ЛР5 (вариант 7): CI/CD + MLflow (SQLite + MinIO) + self-hosted runner
 
 ЛР5 встроена в текущую инфраструктуру проекта:
-- MLflow + Postgres добавлены как сервисы в **текущий** `docker-compose.yml`;
+- MLflow добавлен как сервис в **текущий** `docker-compose.yml` (backend store: SQLite);
 - MinIO используется тот же, что и для DVC/моделей (добавлен bucket `mlflow`);
 - ML логирование добавлено в существующий скрипт `scripts/train_recommendation_model.py`;
 - CI/CD workflow собирает и деплоит **api/worker** (существующие Dockerfile’ы) через `docker compose`.
 
 ### Развертывание MLflow (Docker Compose)
 
-Поднимите стек:
+Поднимите только инфраструктуру (чтобы MLflow был доступен по HTTP и worker мог скачать Production-модель):
 
 ```bash
-docker compose up --build -d
+docker compose up -d redis minio minio-init mlflow
 ```
 
 Проверка:
@@ -171,9 +171,10 @@ Bucket `mlflow` создается автоматически сервисом `
 
 Скрипт: `scripts/train_recommendation_model.py`
 
-Если задан `MLFLOW_TRACKING_URI`, скрипт логирует артефакты обучения в MLflow:
+Если задан `MLFLOW_TRACKING_URI`, скрипт логирует параметры/метрики и артефакты обучения в MLflow:
 - параметры (components/seed/data_path)
-- артефакты `recommendation.onnx` и `recommendation_meta.json` в MLflow (через MinIO)
+- артефакты `recommendation.onnx` и `recommendation_meta.json` в MLflow
+- регистрирует model в MLflow под именем `recsys_model` и переводит в stage `Production` при успешном `quality gate (NDCG@10 > 0.5)`
 
 Пример:
 
@@ -208,4 +209,10 @@ Secrets (GitHub Actions):
 - **test**: `poetry install` → `ruff check` → `pytest`
 - **train**: настройка DVC remote secrets → `dvc pull` → обучение новой модели `scripts/train_recommendation_model.py` с логированием в MLflow
 - **build**: локальная сборка Docker-образов `recsys-api:latest` и `recsys-worker:latest`
+
+После того как workflow завершился, поднимите сервисы на основе собранных образов:
+
+```bash
+docker compose up -d --no-build api worker
+```
 
