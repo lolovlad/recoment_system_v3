@@ -40,16 +40,23 @@ def ensure_recommendation_artifacts_local() -> tuple[Path, Path]:
             mlflow.set_tracking_uri(tracking_uri)
             client = MlflowClient()
 
-            versions = client.get_latest_versions(model_name, stages=[model_stage], max_results=1)
+            # В разных версиях MLflow сигнатура get_latest_versions отличается.
+            # Берём максимум 1 версию вручную.
+            versions = client.get_latest_versions(model_name, stages=[model_stage])
             if not versions:
                 logger.warning("MLflow: no %s stage model versions for %s", model_stage, model_name)
             else:
                 mv = versions[0]
-                # source: runs:/<run_id>/sklearn_model
-                source = str(mv.source)
-                run_id = source.split("/")[1] if source.startswith("runs:/") else None
+                # В MLflow ModelVersion обычно есть run_id.
+                # mv.source иногда приходит как runs:/... либо как s3://.../artifacts/.../sklearn_model,
+                # поэтому парсинг source ненадёжен.
+                run_id = getattr(mv, "run_id", None)
                 if not run_id:
-                    raise RuntimeError(f"Cannot parse run_id from model source: {source}")
+                    # fallback: старый формат mv.source: runs:/<run_id>/sklearn_model
+                    source = str(mv.source)
+                    run_id = source.split("/")[1] if source.startswith("runs:/") else None
+                    if not run_id:
+                        raise RuntimeError(f"Cannot resolve run_id from model source: {source}")
 
                 dst_dir = str(onnx_path.parent)
                 onnx_artifact_uri = f"runs:/{run_id}/recommendation_artifacts/recommendation.onnx"

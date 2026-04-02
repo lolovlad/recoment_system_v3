@@ -41,3 +41,5 @@ data/*.parquet
 data/mlflow/
 !data/*.dvc
 !data/.gitkeep
+
+models/
