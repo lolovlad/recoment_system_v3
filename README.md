@@ -216,3 +216,9 @@ Secrets (GitHub Actions):
 docker compose up -d --no-build api worker
 ```
 
+### Проверка всей системы (API + worker + загрузка модели)
+
+```powershell
+poetry run python scripts\lab4_e2e_check.py --base-url http://127.0.0.1:8000 --user-id 1 --force-minio-download
+```
+

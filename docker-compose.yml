@@ -37,7 +37,6 @@ services:
     networks:
       - app_net
     volumes:
-      - ./models:/app/models
       - ./data:/app/data:ro
 
   worker:
