@@ -510,7 +510,8 @@ def main() -> None:
                     "ndcg_k": int(args.ndcg_k),
                 }
             )
-            mlflow_mod.log_metric(f"ndcg@{args.ndcg_k}", float(ndcg))
+            # MLflow metric names do not allow "@"
+            mlflow_mod.log_metric(f"ndcg_{args.ndcg_k}", float(ndcg))
             mlflow_mod.log_metrics(metrics)
             mlflow_mod.log_artifact(str(out_onnx), artifact_path="recommendation_artifacts")
             mlflow_mod.log_artifact(str(out_meta), artifact_path="recommendation_artifacts")
@@ -542,7 +543,7 @@ def main() -> None:
                 )
             else:
                 raise RuntimeError(
-                    f"Quality gate failed: ndcg@{args.ndcg_k}={ndcg:.4f} <= {args.ndcg_threshold}"
+                    f"Quality gate failed: ndcg_{args.ndcg_k}={ndcg:.4f} <= {args.ndcg_threshold}"
                 )
 
         # синк артефактов рекомендаций в MinIO bucket models (fallback для worker)
