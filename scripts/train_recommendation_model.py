@@ -468,8 +468,7 @@ def main() -> None:
         seq = grp["item_id"].astype(str).tolist()
         user_id_to_seq[str(uid)] = seq
 
-    # item_ids_ordered будет взят из матрицы (sorted unique items) внутри блока расчёта NDCG.
-    item_ids_ordered = sorted(df["item_id"].unique())
+    # item_ids_ordered будет получен внутри блока расчёта NDCG из обучаемой матрицы.
 
     with (mlflow_mod.start_run(run_name="train_recommendation_model") if mlflow_mod else _nullcontext()):
         if mlflow_mod:
