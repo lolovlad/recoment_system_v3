@@ -217,6 +217,7 @@ Secrets (GitHub Actions):
 docker compose up -d --no-build api worker
 ```
 
+
 ### Проверка всей системы (API + worker + загрузка модели)
 
 ```powershell
