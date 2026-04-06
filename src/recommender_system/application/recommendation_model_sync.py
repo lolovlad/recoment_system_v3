@@ -5,7 +5,15 @@ import os
 from pathlib import Path
 
 from ..env import load_project_env
-from ..infrastructure.recommendation_artifacts import local_meta_path, local_onnx_path
+from ..infrastructure.recommendation_artifacts import (
+    MLFLOW_META_ARTIFACT_PATH,
+    MLFLOW_ONNX_ARTIFACT_PATH,
+    MLFLOW_ONNX_MODEL_FILENAME,
+    META_FILENAME,
+    ONNX_FILENAME,
+    local_meta_path,
+    local_onnx_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,22 +56,26 @@ def ensure_recommendation_artifacts_local() -> tuple[Path, Path]:
             else:
                 mv = versions[0]
                 # В MLflow ModelVersion обычно есть run_id.
-                # mv.source иногда приходит как runs:/... либо как s3://.../artifacts/.../sklearn_model,
+                # mv.source иногда приходит как runs:/... либо как s3://.../artifacts/.../...,
                 # поэтому парсинг source ненадёжен.
                 run_id = getattr(mv, "run_id", None)
                 if not run_id:
-                    # fallback: старый формат mv.source: runs:/<run_id>/sklearn_model
+                    # fallback: старый формат mv.source: runs:/<run_id>/<artifact_path>
                     source = str(mv.source)
                     run_id = source.split("/")[1] if source.startswith("runs:/") else None
                     if not run_id:
                         raise RuntimeError(f"Cannot resolve run_id from model source: {source}")
 
                 dst_dir = str(onnx_path.parent)
-                onnx_artifact_uri = f"runs:/{run_id}/recommendation_artifacts/recommendation.onnx"
-                meta_artifact_uri = f"runs:/{run_id}/recommendation_artifacts/recommendation_meta.json"
+                meta_artifact_uri = f"runs:/{run_id}/{MLFLOW_META_ARTIFACT_PATH}/{META_FILENAME}"
+                onnx_primary = f"runs:/{run_id}/{MLFLOW_ONNX_ARTIFACT_PATH}/{MLFLOW_ONNX_MODEL_FILENAME}"
+                onnx_legacy = f"runs:/{run_id}/{MLFLOW_META_ARTIFACT_PATH}/{ONNX_FILENAME}"
 
-                onnx_tmp = download_artifacts(onnx_artifact_uri, dst_path=dst_dir)
                 meta_tmp = download_artifacts(meta_artifact_uri, dst_path=dst_dir)
+                try:
+                    onnx_tmp = download_artifacts(onnx_primary, dst_path=dst_dir)
+                except Exception:
+                    onnx_tmp = download_artifacts(onnx_legacy, dst_path=dst_dir)
 
                 # download_artifacts вернёт путь до файла, но может разложить по подпапкам.
                 Path(onnx_tmp).replace(onnx_path)

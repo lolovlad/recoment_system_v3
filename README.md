@@ -174,7 +174,7 @@ Bucket `mlflow` создается автоматически сервисом `
 Если задан `MLFLOW_TRACKING_URI`, скрипт логирует параметры/метрики и артефакты обучения в MLflow:
 - параметры (components/seed/data_path)
 - артефакты `recommendation.onnx` и `recommendation_meta.json` в MLflow
-- регистрирует model в MLflow под именем `recsys_model` и переводит в stage `Production` при успешном `quality gate (NDCG@10 > 0.5)`
+- логирует ONNX через `mlflow.onnx.log_model`, метаданные — отдельным артефактом; регистрирует ONNX-модель в MLflow под именем `recsys_model` и переводит в stage `Production` при успешном `quality gate (NDCG@10 > 0.5)`
 
 Пример:
 
@@ -209,8 +209,9 @@ Secrets (GitHub Actions):
 - **test**: `poetry install` → `ruff check` → `pytest`
 - **train**: настройка DVC remote secrets → `dvc pull` → обучение новой модели `scripts/train_recommendation_model.py` с логированием в MLflow
 - **build**: локальная сборка Docker-образов `recsys-api:latest` и `recsys-worker:latest`
+- **push** (только не на `pull_request`): публикация в GitHub Container Registry — `ghcr.io/<owner>/recsys-api:latest` и `ghcr.io/<owner>/recsys-worker:latest` (`<owner>` в нижнем регистре)
 
-После того как workflow завершился, поднимите сервисы на основе собранных образов:
+После того как workflow завершился, поднимите сервисы на основе собранных образов (или подтяните образы из GHCR и задайте их в `docker-compose`):
 
 ```bash
 docker compose up -d --no-build api worker

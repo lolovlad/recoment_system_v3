@@ -15,6 +15,11 @@ MODELS_DIR = Path("models")
 ONNX_FILENAME = "recommendation.onnx"
 META_FILENAME = "recommendation_meta.json"
 
+# MLflow: ``mlflow.onnx.log_model(..., artifact_path=...)`` + мета как артефакт
+MLFLOW_ONNX_ARTIFACT_PATH = "recommendation_onnx"
+MLFLOW_ONNX_MODEL_FILENAME = "model.onnx"
+MLFLOW_META_ARTIFACT_PATH = "recommendation_artifacts"
+
 
 def local_onnx_path() -> Path:
     return MODELS_DIR / ONNX_FILENAME

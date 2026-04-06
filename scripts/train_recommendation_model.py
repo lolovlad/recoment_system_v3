@@ -34,6 +34,8 @@ import boto3
 try:
     from recommender_system.env import load_project_env
     from recommender_system.infrastructure.recommendation_artifacts import (
+        MLFLOW_META_ARTIFACT_PATH,
+        MLFLOW_ONNX_ARTIFACT_PATH,
         local_meta_path,
         local_onnx_path,
         remote_meta_key,
@@ -43,6 +45,8 @@ try:
 except ModuleNotFoundError:
     from src.recommender_system.env import load_project_env
     from src.recommender_system.infrastructure.recommendation_artifacts import (
+        MLFLOW_META_ARTIFACT_PATH,
+        MLFLOW_ONNX_ARTIFACT_PATH,
         local_meta_path,
         local_onnx_path,
         remote_meta_key,
@@ -513,20 +517,17 @@ def main() -> None:
             # MLflow metric names do not allow "@"
             mlflow_mod.log_metric(f"ndcg_{args.ndcg_k}", float(ndcg))
             mlflow_mod.log_metrics(metrics)
-            mlflow_mod.log_artifact(str(out_onnx), artifact_path="recommendation_artifacts")
-            mlflow_mod.log_artifact(str(out_meta), artifact_path="recommendation_artifacts")
-
-            # Логируем sklearn-модель для регистрации и получения run_id при download из worker.
             try:
-                mlflow_mod.sklearn.log_model(svd_for_ndcg, artifact_path="sklearn_model")
+                mlflow_mod.onnx.log_model(str(out_onnx), artifact_path=MLFLOW_ONNX_ARTIFACT_PATH)
             except Exception as e:
-                raise RuntimeError(f"Failed to log sklearn model to MLflow: {e}") from e
+                raise RuntimeError(f"Failed to log ONNX model to MLflow: {e}") from e
+            mlflow_mod.log_artifact(str(out_meta), artifact_path=MLFLOW_META_ARTIFACT_PATH)
 
-            # Register model under required name; promote to Production only if quality gate passed.
+            # Register ONNX model in Model Registry; worker скачивает по run_id артефакты onnx + meta.
             from mlflow.tracking import MlflowClient
 
             run_id = mlflow_mod.active_run().info.run_id
-            model_uri = f"runs:/{run_id}/sklearn_model"
+            model_uri = f"runs:/{run_id}/{MLFLOW_ONNX_ARTIFACT_PATH}"
             registered = mlflow_mod.register_model(model_uri, args.register_model_name)
             version = registered.version
 

@@ -1,5 +1,9 @@
 name: CI/CD Recommender System
 
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
     branches: ["main", "master"]
@@ -260,5 +264,34 @@ jobs:
             sudo docker build -f Dockerfile.worker -t recsys-worker:latest .
           else
             "${{ steps.docker_cli.outputs.docker_bin }}" build -f Dockerfile.worker -t recsys-worker:latest .
+          fi
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push images to GHCR
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          DOCKER_BIN: ${{ steps.docker_cli.outputs.docker_bin }}
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          API_IMAGE="ghcr.io/${OWNER_LOWER}/recsys-api:latest"
+          WORKER_IMAGE="ghcr.io/${OWNER_LOWER}/recsys-worker:latest"
+          if [ "${{ steps.docker_cli.outputs.use_sudo }}" = "true" ]; then
+            sudo "$DOCKER_BIN" tag recsys-api:latest "$API_IMAGE"
+            sudo "$DOCKER_BIN" tag recsys-worker:latest "$WORKER_IMAGE"
+            sudo "$DOCKER_BIN" push "$API_IMAGE"
+            sudo "$DOCKER_BIN" push "$WORKER_IMAGE"
+          else
+            "$DOCKER_BIN" tag recsys-api:latest "$API_IMAGE"
+            "$DOCKER_BIN" tag recsys-worker:latest "$WORKER_IMAGE"
+            "$DOCKER_BIN" push "$API_IMAGE"
+            "$DOCKER_BIN" push "$WORKER_IMAGE"
           fi
 
