@@ -31,6 +31,8 @@ from sklearn.decomposition import TruncatedSVD
 
 import boto3
 
+import onnx
+
 try:
     from recommender_system.env import load_project_env
     from recommender_system.infrastructure.recommendation_artifacts import (
@@ -518,7 +520,9 @@ def main() -> None:
             mlflow_mod.log_metric(f"ndcg_{args.ndcg_k}", float(ndcg))
             mlflow_mod.log_metrics(metrics)
             try:
-                mlflow_mod.onnx.log_model(str(out_onnx), artifact_path=MLFLOW_ONNX_ARTIFACT_PATH)
+                # MLflow вызывает onnx.save_model(proto, ...); путь str не подходит — нужен ModelProto.
+                onnx_proto = onnx.load(str(out_onnx))
+                mlflow_mod.onnx.log_model(onnx_proto, artifact_path=MLFLOW_ONNX_ARTIFACT_PATH)
             except Exception as e:
                 raise RuntimeError(f"Failed to log ONNX model to MLflow: {e}") from e
             mlflow_mod.log_artifact(str(out_meta), artifact_path=MLFLOW_META_ARTIFACT_PATH)

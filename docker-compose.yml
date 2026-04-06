@@ -1,3 +1,6 @@
+# Образы api/worker из Container Registry (CI пушит в GHCR).
+# Переопределите в .env: GHCR_IMAGE_PREFIX=ghcr.io/<ваш-github-login> (строчными буквами)
+# Для приватных пакетов: docker login ghcr.io
 services:
   redis:
     image: redis:7-alpine
@@ -13,10 +16,8 @@ services:
       - app_net
 
   api:
-    image: recsys-api:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/lolovlad}/recsys-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     container_name: api_recommender_system_v3
     ports:
       - "8000:8000"
@@ -40,10 +41,8 @@ services:
       - ./data:/app/data:ro
 
   worker:
-    image: recsys-worker:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/lolovlad}/recsys-worker:${IMAGE_TAG:-latest}
+    pull_policy: always
     container_name: worker_recommender_system_v3
     env_file:
       - path: .env

@@ -76,9 +76,14 @@ dvc push
 
 ### Docker (рекомендуется)
 
+Образы `api` и `worker` берутся из GitHub Container Registry (`ghcr.io/<owner>/recsys-api` и `recsys-worker`). В `.env` можно задать префикс: `GHCR_IMAGE_PREFIX=ghcr.io/<ваш-login>` (имя в нижнем регистре). Для приватных пакетов выполните `docker login ghcr.io`.
+
 ```bash
-docker compose up --build -d
+docker compose pull api worker
+docker compose up -d
 ```
+
+Локальная сборка образов (без registry): `docker build -f Dockerfile -t ghcr.io/<owner>/recsys-api:latest .` и то же для `Dockerfile.worker`, затем `docker compose up -d`.
 
 Проверка:
 - Swagger: `http://127.0.0.1:8000/docs`
